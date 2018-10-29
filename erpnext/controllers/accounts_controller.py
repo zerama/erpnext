@@ -529,10 +529,11 @@ class AccountsController(TransactionBase):
 						_("Warning: System will not check overbilling since amount for Item {0} in {1} is zero").format(
 							item.item_code, ref_dt))
 				else:
-					already_billed = frappe.db.sql("""select sum(%s) from `tab%s`
-						where %s=%s and docstatus=1 and parent != %s""" %
-												   (based_on, self.doctype + " Item", item_ref_dn, '%s', '%s'),
-												   (item.get(item_ref_dn), self.name))[0][0]
+					already_billed = frappe.db.sql("""
+						select sum(%s) from `tab%s`
+						where %s=%s and docstatus=1
+						and parent != %s""" % (based_on, self.doctype + " Item", item_ref_dn, '%s', '%s'),
+						(item.get(item_ref_dn), self.name))[0][0]
 
 					total_billed_amt = flt(flt(already_billed) + flt(item.get(based_on)),
 										   self.precision(based_on, item))
@@ -543,9 +544,12 @@ class AccountsController(TransactionBase):
 					max_allowed_amt = flt(ref_amt * (100 + tolerance) / 100)
 
 					if total_billed_amt - max_allowed_amt > 0.01:
-						frappe.throw(_(
-							"Cannot overbill for Item {0} in row {1} more than {2}. To allow over-billing, please set in Stock Settings").format(
-							item.item_code, item.idx, max_allowed_amt))
+						if frappe.db.get_single_value('Accounts Settings', 'has_overbilling'):
+							pass
+						else:
+							frappe.throw(_(
+								"Cannot overbill for Item {0} in row {1} more than {2}. To allow over-billing, please set in Stock Settings").format(
+								item.item_code, item.idx, max_allowed_amt))
 
 	def get_company_default(self, fieldname):
 		from erpnext.accounts.utils import get_company_default
