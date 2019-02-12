@@ -4,7 +4,6 @@ import frappe, base64, hashlib, hmac, json
 import datetime
 from frappe import _
 
-
 def verify_request():
 	woocommerce_settings = frappe.get_doc("Woocommerce Settings")
 	sig = base64.b64encode(
@@ -23,8 +22,7 @@ def verify_request():
 
 @frappe.whitelist(allow_guest=True)
 def order(data=None):
-	if not data:
-		verify_request()
+	verify_request()
 
 	if frappe.request and frappe.request.data:
 		fd = json.loads(frappe.request.data)
@@ -53,8 +51,10 @@ def order(data=None):
 
 		items_list = fd.get("line_items")
 		for item in items_list:
+			variation_id = item.get("variation_id")
+			product_id = item.get("product_id") if variation_id == 0 else variation_id
 
-			item_woo_com_id = item.get("product_id")
+			item_woo_com_id = product_id
 
 			if frappe.get_value("Item",{"woocommerce_id": item_woo_com_id}):
 				#Edit
@@ -84,13 +84,15 @@ def order(data=None):
 		new_sales_order.delivery_date = order_delivery_date
 		default_set_company = frappe.get_doc("Global Defaults")
 		company = raw_billing_data.get("company") or default_set_company.default_company
-		found_company = frappe.get_doc("Company",{"name":company})
+		found_company = frappe.get_doc("Company",{"name":default_set_company.default_company})
 		company_abbr = found_company.abbr
 
 		new_sales_order.company = company
 
 		for item in items_list:
-			woocomm_item_id = item.get("product_id")
+			variation_id = item.get("variation_id")
+			product_id = item.get("product_id") if variation_id == 0 else variation_id
+			woocomm_item_id = product_id
 			found_item = frappe.get_doc("Item",{"woocommerce_id": woocomm_item_id})
 
 			ordered_items_tax = item.get("total_tax")
@@ -175,19 +177,20 @@ def link_customer_and_address(raw_billing_data,customer_status):
 	frappe.db.commit()
 
 def link_item(item_data,item_status):
-
+	variation_id = item_data.get("variation_id")
+	product_id = item_data.get("product_id") if variation_id == 0 else variation_id
 	if item_status == 0:
 		#Create Item
 		item = frappe.new_doc("Item")
 
 	if item_status == 1:
 		#Edit Item
-		item_woo_com_id = item_data.get("product_id")
+		item_woo_com_id = product_id
 		item = frappe.get_doc("Item",{"woocommerce_id": item_woo_com_id})
 
 	item.item_name = str(item_data.get("name"))
-	item.item_code = "woocommerce - " + str(item_data.get("product_id"))
-	item.woocommerce_id = str(item_data.get("product_id"))
+	item.item_code = "woocommerce - " + str(product_id)
+	item.woocommerce_id = str(product_id)
 	item.item_group = "WooCommerce Products"
 	item.save()
 	frappe.db.commit()
@@ -210,3 +213,4 @@ def add_tax_details(sales_order,price,desc,status):
 							"tax_amount": price,
 							"description": desc
 							})
+
